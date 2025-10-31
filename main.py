@@ -6,6 +6,8 @@ import os
 import uuid
 import logging
 import datetime
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+import re
 
 # --- Config ---
 API_TOKEN = os.getenv("API_TOKEN", "your-secret-token")
@@ -39,33 +41,34 @@ def health_check():
     return {"status": "ok"}
 
 # --- Transcription Endpoint ---
+def extract_video_id(url: str) -> str:
+    match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", url)
+    if not match:
+        raise ValueError("Invalid YouTube URL")
+    return match.group(1)
+
 @app.post("/transcribe")
 def transcribe_video(req: VideoRequest, _: str = Depends(verify_token)):
-    model = whisper.load_model(WHISPER_MODEL) # Load only when needed
     temp_id = str(uuid.uuid4())
-    audio_path = f"{temp_id}.mp3"
+    video_path = f"{temp_id}.mp4"
 
     try:
         logging.info(f"Transcription request for: {req.video_url}")
+        model = whisper.load_model(WHISPER_MODEL)
 
         yt_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': audio_path,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
+            'format': 'mp4',
+            'outtmpl': video_path,
             'socket_timeout': 30,
         }
 
         with yt_dlp.YoutubeDL(yt_opts) as ydl:
             ydl.download([req.video_url])
-        logging.info("Audio downloaded")
+        logging.info("Video downloaded")
 
-        result = model.transcribe(audio_path)
-        os.remove(audio_path)
-        logging.info("Transcription complete")
+        result = model.transcribe(video_path)
+        os.remove(video_path)
+        logging.info("Whisper transcription complete")
 
         segments = [
             {
@@ -77,13 +80,36 @@ def transcribe_video(req: VideoRequest, _: str = Depends(verify_token)):
         ]
 
         return {
+            "source": "whisper",
             "transcript": result["text"],
             "segments": segments
         }
 
-    except Exception as e:
-        logging.error(f"Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+    except Exception as whisper_error:
+        logging.warning(f"Whisper failed: {str(whisper_error)}")
+        try:
+            video_id = extract_video_id(req.video_url)
+            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            segments = [
+                {
+                    "start": format_time(seg["start"]),
+                    "end": format_time(seg["start"] + seg["duration"]),
+                    "text": seg["text"].strip()
+                }
+                for seg in transcript
+            ]
+            full_text = " ".join(seg["text"] for seg in transcript)
+            logging.info("Fallback to YouTube captions succeeded")
+
+            return {
+                "source": "youtube_captions",
+                "transcript": full_text,
+                "segments": segments
+            }
+
+        except (TranscriptsDisabled, NoTranscriptFound, Exception) as caption_error:
+            logging.error(f"Fallback failed: {str(caption_error)}")
+            raise HTTPException(status_code=500, detail="Transcription failed: Whisper and YouTube captions unavailable")
 
 if __name__ == "__main__":
     import uvicorn
