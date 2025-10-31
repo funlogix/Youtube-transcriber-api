@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: youtube-transcriber
+    env: python
+    repo: https://github.com/funlogix/Youtube-transcriber-api
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    autoDeploy: true
+    envVars:
+      - key: API_TOKEN
+      - key: WHISPER_MODEL
+        value: tiny
