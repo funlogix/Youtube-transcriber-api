@@ -16,7 +16,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 # --- App ---
 app = FastAPI()
-model = whisper.load_model(WHISPER_MODEL)
 
 # --- Models ---
 class VideoRequest(BaseModel):
@@ -42,6 +41,7 @@ def health_check():
 # --- Transcription Endpoint ---
 @app.post("/transcribe")
 def transcribe_video(req: VideoRequest, _: str = Depends(verify_token)):
+    model = whisper.load_model(WHISPER_MODEL) # Load only when needed
     temp_id = str(uuid.uuid4())
     audio_path = f"{temp_id}.mp3"
 
@@ -84,3 +84,8 @@ def transcribe_video(req: VideoRequest, _: str = Depends(verify_token)):
     except Exception as e:
         logging.error(f"Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
