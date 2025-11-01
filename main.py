@@ -113,5 +113,5 @@ def transcribe_video(req: VideoRequest, _: str = Depends(verify_token)):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 10000))
+    port = int(os.getenv("PORT", 7860)) # 7860 for Hugging Face, 10000 for Render
     uvicorn.run(app, host="0.0.0.0", port=port)
