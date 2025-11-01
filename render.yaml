@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: youtube-transcriber
+    env: python
+    repo: https://github.com/funlogix/Youtube-transcriber-api
+    branch: main
+    buildCommand: |
+      apt-get update && apt-get install -y ffmpeg
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: python main.py
+    autoDeploy: true
+    envVars:
+      - key: API_TOKEN
+      - key: GROQ_API_KEY
+        sync: false   # Set in Render dashboard (kept private)

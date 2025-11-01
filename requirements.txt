@@ -1,6 +1,6 @@
 fastapi
 uvicorn
 yt-dlp
-openai-whisper
-pydantic
+requests
 youtube-transcript-api
+pydantic
